@@ -57,14 +57,24 @@ jobs:
             arch/arm64/configs/vendor/bengal_defconfig \
             arch/arm64/configs/vendor/xiaomi/chime.config
 
+          echo "--- Searching for the resulting .config file ---"
+          find . -maxdepth 3 -name ".config" -exec ls -la {} \;
+
       - name: Enable ath9k_htc driver options
         run: |
-          cd out
-          sed -i '/CONFIG_ATH9K_HTC/d' .config
-          sed -i '/CONFIG_ATH9K_HW/d' .config
-          sed -i '/CONFIG_ATH9K_COMMON/d' .config
-          sed -i '/CONFIG_ATH_COMMON/d' .config
-          cat >> .config << 'EOF'
+          CONFIG_FILE=$(find . -maxdepth 3 -name ".config" | head -n 1)
+          echo "Using config file at: $CONFIG_FILE"
+
+          if [ -z "$CONFIG_FILE" ]; then
+            echo "ERROR: No .config file found anywhere. Aborting."
+            exit 1
+          fi
+
+          sed -i '/CONFIG_ATH9K_HTC/d' "$CONFIG_FILE"
+          sed -i '/CONFIG_ATH9K_HW/d' "$CONFIG_FILE"
+          sed -i '/CONFIG_ATH9K_COMMON/d' "$CONFIG_FILE"
+          sed -i '/CONFIG_ATH_COMMON/d' "$CONFIG_FILE"
+          cat >> "$CONFIG_FILE" << 'EOF'
           CONFIG_ATH_COMMON=m
           CONFIG_ATH9K_HW=m
           CONFIG_ATH9K_COMMON=m
@@ -72,7 +82,13 @@ jobs:
           CONFIG_MAC80211=y
           CONFIG_CFG80211=y
           EOF
-          cd ..
+
+          # Ensure the file also exists at out/.config for the build step,
+          # regardless of where merge_config.sh actually placed it.
+          mkdir -p out
+          if [ "$CONFIG_FILE" != "./out/.config" ]; then
+            cp "$CONFIG_FILE" out/.config
+          fi
 
       - name: Build kernel
         run: |
