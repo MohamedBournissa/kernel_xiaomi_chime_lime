@@ -168,12 +168,16 @@ jobs:
                 [ -z "$sym" ] && continue
                 sed -i -E "s/\\b${sym}\\b/ft8719v2_${sym}/g" "$f"
               done <<< "$SYMS"
+              # dev_attr_X is a macro-generated struct name derived from DEVICE_ATTR(X, ...),
+              # not caught by the function-call regex above. Handle it explicitly.
+              sed -i -E 's/\bdev_attr_fts_upgrade_bin\b/dev_attr_ft8719v2_fts_upgrade_bin/g' "$f"
+              sed -i -E 's/DEVICE_ATTR\(fts_upgrade_bin\b/DEVICE_ATTR(ft8719v2_fts_upgrade_bin/g' "$f"
             done
 
-            echo "--- Verifying: searching for any remaining un-prefixed fts_/fw_file/module_list/fwupgrade symbols in FT8719 dir ---"
-            grep -rnE '\b(fts_[A-Za-z0-9_]+|fw_file|module_list|fwupgrade)\b' "$FT8719_DIR" | grep -v 'ft8719v2_' && \
+            echo "--- Verifying: searching for any remaining un-prefixed fts_/fw_file/module_list/fwupgrade/dev_attr_fts symbols in FT8719 dir ---"
+            grep -rnE '\b(fts_[A-Za-z0-9_]+|fw_file|module_list|fwupgrade|dev_attr_fts_[A-Za-z0-9_]+)\b' "$FT8719_DIR" | grep -v 'ft8719v2_' && \
               echo "WARNING: un-prefixed symbols still found above, may still conflict" || \
-              echo "Confirmed: all fts_/fw_file/module_list/fwupgrade symbols in $FT8719_DIR are now prefixed."
+              echo "Confirmed: all fts_/fw_file/module_list/fwupgrade/dev_attr_fts symbols in $FT8719_DIR are now prefixed."
 
             echo "Renamed conflicting symbols in $FT8719_DIR to avoid multiple-definition linker errors."
           else
