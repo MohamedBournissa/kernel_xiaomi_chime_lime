@@ -165,8 +165,8 @@ jobs:
                 [ -z "$sym" ] && continue
                 sed -i -E "s/\\b${sym}\\b/ft8719v2_${sym}/g" "$f"
               done <<< "$SYMS"
-              sed -i -E 's/\bdev_attr_fts_upgrade_bin\b/dev_attr_ft8719v2_fts_upgrade_bin/g' "$f"
-              sed -i -E 's/DEVICE_ATTR\(fts_upgrade_bin\b/DEVICE_ATTR(ft8719v2_fts_upgrade_bin/g' "$f"
+              sed -i -E 's/\bdev_attr_(fts_[A-Za-z0-9_]+)\b/dev_attr_ft8719v2_\1/g' "$f"
+              sed -i -E 's/DEVICE_ATTR\((fts_[A-Za-z0-9_]+)\b/DEVICE_ATTR(ft8719v2_\1/g' "$f"
             done < <(find "$FT8719_DIR" -type f \( -name '*.c' -o -name '*.h' \) -print0)
 
             echo "--- Verifying: searching for any remaining un-prefixed fts_/fw_file/module_list/fwupgrade/dev_attr_fts symbols anywhere under FT8719 ---"
