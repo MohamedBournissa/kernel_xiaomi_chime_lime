@@ -128,6 +128,7 @@ jobs:
           sed -i '/CONFIG_ATH9K_COMMON/d' "$CONFIG_FILE"
           sed -i '/CONFIG_ATH_COMMON/d' "$CONFIG_FILE"
           sed -i '/CONFIG_DM_CRYPT/d' "$CONFIG_FILE"
+          sed -i '/CONFIG_SND_SOC_WCD_MBHC/d' "$CONFIG_FILE"
           cat >> "$CONFIG_FILE" << 'EOF'
           CONFIG_ATH_COMMON=m
           CONFIG_ATH9K_HW=m
@@ -136,6 +137,7 @@ jobs:
           CONFIG_MAC80211=y
           CONFIG_CFG80211=y
           # CONFIG_DM_CRYPT is not set
+          # CONFIG_SND_SOC_WCD_MBHC is not set
           EOF
 
           # Ensure the file also exists at out/.config for the build step,
