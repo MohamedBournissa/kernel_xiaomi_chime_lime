@@ -54,22 +54,18 @@ jobs:
           GCC64_BIN="$(pwd)/gcc64/bin/aarch64-linux-android-gcc"
           if [ ! -x "$GCC64_BIN" ]; then
             echo "ERROR: $GCC64_BIN not found or not executable."
-            echo "Contents of gcc64/bin:"
             ls -la gcc64/bin/ 2>&1 || echo "gcc64/bin does not even exist"
             exit 1
           fi
-          echo "Confirmed: $GCC64_BIN exists and is executable."
           "$GCC64_BIN" --version
 
           echo "--- Verifying gcc32 compiler binary exists and is executable ---"
           GCC32_BIN="$(pwd)/gcc32/bin/arm-linux-androideabi-gcc"
           if [ ! -x "$GCC32_BIN" ]; then
             echo "ERROR: $GCC32_BIN not found or not executable."
-            echo "Contents of gcc32/bin:"
             ls -la gcc32/bin/ 2>&1 || echo "gcc32/bin does not even exist"
             exit 1
           fi
-          echo "Confirmed: $GCC32_BIN exists and is executable."
           "$GCC32_BIN" --version
 
       - name: Merge base defconfig with chime fragment
@@ -83,26 +79,19 @@ jobs:
           export CLANG_TRIPLE=aarch64-linux-gnu-
           export PATH=$(pwd)/clang/bin:$PATH
 
-          echo "--- Verifying source config files exist before merging ---"
           BASE_DEFCONFIG="arch/arm64/configs/vendor/bengal_defconfig"
           FRAGMENT_CONFIG="arch/arm64/configs/vendor/xiaomi/chime.config"
 
           if [ ! -f "$BASE_DEFCONFIG" ]; then
             echo "ERROR: Base defconfig not found at $BASE_DEFCONFIG"
-            echo "Searching for it elsewhere in the tree..."
             find . -name "bengal_defconfig" 2>/dev/null
             exit 1
           fi
           if [ ! -f "$FRAGMENT_CONFIG" ]; then
             echo "ERROR: Fragment config not found at $FRAGMENT_CONFIG"
-            echo "Searching for it elsewhere in the tree..."
             find . -name "chime.config" 2>/dev/null
             exit 1
           fi
-
-          echo "Both source files confirmed present. Proceeding with merge."
-          echo "Base defconfig line count: $(wc -l < $BASE_DEFCONFIG)"
-          echo "Fragment config line count: $(wc -l < $FRAGMENT_CONFIG)"
 
           scripts/kconfig/merge_config.sh -m -O out \
             "$BASE_DEFCONFIG" \
@@ -110,10 +99,8 @@ jobs:
 
           echo "--- Searching for the resulting .config file ---"
           find . -maxdepth 3 -name ".config" -exec ls -la {} \;
-          echo "--- .config line count if it exists ---"
-          find . -maxdepth 3 -name ".config" -exec wc -l {} \;
 
-      - name: Enable ath9k_htc driver options
+      - name: Enable ath9k_htc driver options and patch known conflicts
         run: |
           CONFIG_FILE=$(find . -maxdepth 3 -name ".config" | head -n 1)
           echo "Using config file at: $CONFIG_FILE"
@@ -135,6 +122,7 @@ jobs:
           CONFIG_ATH9K_HTC=m
           CONFIG_MAC80211=y
           CONFIG_CFG80211=y
+          CONFIG_CFG80211_WEXT=y
           # CONFIG_DM_CRYPT is not set
           EOF
 
@@ -142,23 +130,15 @@ jobs:
           MBHC_FILE="techpack/audio/asoc/codecs/wcd-mbhc-v2.c"
           if [ -f "$MBHC_FILE" ]; then
             sed -i '/switch_dev_unregister(&accdet_data);/d' "$MBHC_FILE"
-            echo "Patched: removed broken switch_dev_unregister line from $MBHC_FILE"
-            grep -n "switch_dev_unregister" "$MBHC_FILE" || echo "Confirmed: no remaining references to switch_dev_unregister in this file."
-          else
-            echo "WARNING: $MBHC_FILE not found at expected path. Searching..."
-            find . -name "wcd-mbhc-v2.c" 2>/dev/null
+            grep -n "switch_dev_unregister" "$MBHC_FILE" || echo "Confirmed: no remaining references to switch_dev_unregister."
           fi
 
-          echo "--- Resolving FT8719 driver duplicate-symbol conflict (keeping BOTH drivers, since Redmi 9T ships with either nt36672a or ft8719 panels depending on batch) ---"
+          echo "--- Resolving FT8719 driver duplicate-symbol conflict (recursive, all subfolders) ---"
           FT8719_DIR="drivers/input/touchscreen/FT8719"
           TOUCH_DIR="drivers/input/touchscreen/focaltech_touch"
           if [ -d "$FT8719_DIR" ] && [ -d "$TOUCH_DIR" ]; then
-            echo "--- Extracting ALL globally-visible fts_/fw_file/module_list/fwupgrade symbols anywhere under FT8719 (recursive) ---"
             SYMS=$(grep -rhoE '\b(fts_[A-Za-z0-9_]+|fw_file|module_list|fwupgrade)\b' "$FT8719_DIR" 2>/dev/null | sort -u)
             SYMS=$(printf '%s\nfw_file\nmodule_list\nfwupgrade\nfts_data\n' "$SYMS" | sort -u)
-
-            echo "Symbols to rename under $FT8719_DIR:"
-            echo "$SYMS"
 
             while IFS= read -r -d '' f; do
               while IFS= read -r sym; do
@@ -169,50 +149,37 @@ jobs:
               sed -i -E 's/DEVICE_ATTR\((fts_[A-Za-z0-9_]+)\b/DEVICE_ATTR(ft8719v2_\1/g' "$f"
             done < <(find "$FT8719_DIR" -type f \( -name '*.c' -o -name '*.h' \) -print0)
 
-            echo "--- Verifying: searching for any remaining un-prefixed fts_/fw_file/module_list/fwupgrade/dev_attr_fts symbols anywhere under FT8719 ---"
+            echo "--- Verifying FT8719: no un-prefixed symbols remain ---"
             grep -rnE '\b(fts_[A-Za-z0-9_]+|fw_file|module_list|fwupgrade|dev_attr_fts_[A-Za-z0-9_]+)\b' "$FT8719_DIR" | grep -v 'ft8719v2_' && \
-              echo "WARNING: un-prefixed symbols still found above, may still conflict" || \
-              echo "Confirmed: all fts_/fw_file/module_list/fwupgrade/dev_attr_fts symbols under $FT8719_DIR are now prefixed."
-
-            echo "Renamed conflicting symbols under $FT8719_DIR to avoid multiple-definition linker errors."
+              echo "WARNING: un-prefixed FT8719 symbols still found above" || \
+              echo "Confirmed: all FT8719 symbols are prefixed."
           else
-            echo "WARNING: $FT8719_DIR or $TOUCH_DIR not found. Searching for them..."
+            echo "WARNING: $FT8719_DIR or $TOUCH_DIR not found."
             find . -type d -name "FT8719" 2>/dev/null
-            find . -type d -name "focaltech_touch" 2>/dev/null
           fi
 
-          echo "--- Resolving NT36672A driver duplicate-symbol conflict (same pattern as FT8719, different touchscreen vendor) ---"
+          echo "--- Resolving NT36672A driver duplicate-symbol conflict (recursive, all subfolders) ---"
           NT_DIR="drivers/input/touchscreen/NT36672A"
           NT_OTHER_DIR="drivers/input/touchscreen/nt36xxx"
           if [ -d "$NT_DIR" ] && [ -d "$NT_OTHER_DIR" ]; then
-            echo "--- Extracting ALL globally-visible nvt_ function AND variable names defined in the NT36672A copy ---"
-            NT_SYMS=$(grep -hoE '\bnvt_[A-Za-z0-9_]+\b' "$NT_DIR"/*.c "$NT_DIR"/*.h 2>/dev/null | sort -u)
+            NT_SYMS=$(grep -rhoE '\bnvt_[A-Za-z0-9_]+\b' "$NT_DIR" 2>/dev/null | sort -u)
 
-            echo "Symbols to rename in $NT_DIR:"
-            echo "$NT_SYMS"
-
-            for f in "$NT_DIR"/*.c "$NT_DIR"/*.h; do
-              [ -f "$f" ] || continue
+            while IFS= read -r -d '' f; do
               while IFS= read -r sym; do
                 [ -z "$sym" ] && continue
                 sed -i -E "s/\\b${sym}\\b/nt36672av2_${sym}/g" "$f"
               done <<< "$NT_SYMS"
-            done
+            done < <(find "$NT_DIR" -type f \( -name '*.c' -o -name '*.h' \) -print0)
 
-            echo "--- Verifying: searching for any remaining un-prefixed nvt_ symbols in NT36672A dir ---"
+            echo "--- Verifying NT36672A: no un-prefixed symbols remain ---"
             grep -rnE '\bnvt_[A-Za-z0-9_]+\b' "$NT_DIR" | grep -v 'nt36672av2_' && \
-              echo "WARNING: un-prefixed nvt_ symbols still found above, may still conflict" || \
-              echo "Confirmed: all nvt_ symbols in $NT_DIR are now prefixed."
-
-            echo "Renamed conflicting symbols in $NT_DIR to avoid multiple-definition linker errors."
+              echo "WARNING: un-prefixed NT36672A symbols still found above" || \
+              echo "Confirmed: all NT36672A symbols are prefixed."
           else
-            echo "WARNING: $NT_DIR or $NT_OTHER_DIR not found. Searching for them..."
+            echo "WARNING: $NT_DIR or $NT_OTHER_DIR not found."
             find . -type d -name "NT36672A" 2>/dev/null
-            find . -type d -name "nt36xxx" 2>/dev/null
           fi
 
-          # Ensure the file also exists at out/.config for the build step,
-          # regardless of where merge_config.sh actually placed it.
           mkdir -p out
           if [ "$CONFIG_FILE" != "./out/.config" ]; then
             cp "$CONFIG_FILE" out/.config
@@ -249,20 +216,36 @@ jobs:
           MAKE_EXIT_CODE=$?
           echo "--- make exited with code: $MAKE_EXIT_CODE ---"
 
-          echo "--- Checking for the final kernel Image ---"
           if [ ! -f out/arch/arm64/boot/Image ]; then
             echo "ERROR: out/arch/arm64/boot/Image was NOT produced."
-            echo "Last 50 lines of build.log for context:"
-            tail -n 50 build.log
+            echo "Last 60 lines of build.log for context:"
+            tail -n 60 build.log
             exit 1
           fi
 
           echo "SUCCESS: out/arch/arm64/boot/Image exists."
           ls -la out/arch/arm64/boot/
 
-          if [ "$MAKE_EXIT_CODE" -ne 0 ]; then
-            echo "WARNING: make reported exit code $MAKE_EXIT_CODE but Image exists anyway. Proceeding with caution."
+      - name: Package kernel with AnyKernel3
+        run: |
+          git clone https://github.com/osm0sis/AnyKernel3 --depth=1 AnyKernel3
+
+          sed -i 's/device.name1=/device.name1=lime/g' AnyKernel3/anykernel.sh
+          sed -i 's/device.name2=/device.name2=chime/g' AnyKernel3/anykernel.sh
+          sed -i 's|block=.*;|block=/dev/block/bootdevice/by-name/boot;|g' AnyKernel3/anykernel.sh
+          sed -i 's/is_slot_device=1;/is_slot_device=0;/g' AnyKernel3/anykernel.sh
+
+          if [ -f out/arch/arm64/boot/Image.gz ]; then
+            cp out/arch/arm64/boot/Image.gz AnyKernel3/
+          else
+            cp out/arch/arm64/boot/Image AnyKernel3/
           fi
+
+          mkdir -p AnyKernel3/dtb
+          find out/arch/arm64/boot/dts/ -name "*.dtb" -exec cp {} AnyKernel3/dtb/ \; 2>/dev/null || true
+
+          cd AnyKernel3
+          zip -r9 ../Lime-NetHunter-Kernel.zip * -x .git README.md
 
       - name: Upload build log (always, for debugging)
         if: always()
@@ -271,22 +254,19 @@ jobs:
           name: build-log
           path: build.log
 
-      - name: Upload kernel Image
+      - name: Upload flashable kernel zip
         uses: actions/upload-artifact@v4
         with:
-          name: kernel-image
+          name: Lime-NetHunter-Kernel
+          path: Lime-NetHunter-Kernel.zip
+          if-no-files-found: warn
+
+      - name: Upload raw kernel Image (backup, unpackaged)
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-image-raw
           path: |
             out/arch/arm64/boot/Image
             out/arch/arm64/boot/Image.gz
-            out/arch/arm64/boot/Image.gz-dtb
             out/arch/arm64/boot/dts/**/*.dtb
-          if-no-files-found: warn
-
-      - name: Upload ath9k_htc module (if built as .ko)
-        uses: actions/upload-artifact@v4
-        with:
-          name: ath9k-htc-module
-          path: |
-            out/**/ath9k_htc.ko
-            out/**/ath9k.ko
           if-no-files-found: warn
