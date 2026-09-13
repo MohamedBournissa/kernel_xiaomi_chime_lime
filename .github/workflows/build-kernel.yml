@@ -53,12 +53,35 @@ jobs:
           export CLANG_TRIPLE=aarch64-linux-gnu-
           export PATH=$(pwd)/clang/bin:$PATH
 
-          scripts/kconfig/merge_config.sh -O out \
-            arch/arm64/configs/vendor/bengal_defconfig \
-            arch/arm64/configs/vendor/xiaomi/chime.config
+          echo "--- Verifying source config files exist before merging ---"
+          BASE_DEFCONFIG="arch/arm64/configs/vendor/bengal_defconfig"
+          FRAGMENT_CONFIG="arch/arm64/configs/vendor/xiaomi/chime.config"
+
+          if [ ! -f "$BASE_DEFCONFIG" ]; then
+            echo "ERROR: Base defconfig not found at $BASE_DEFCONFIG"
+            echo "Searching for it elsewhere in the tree..."
+            find . -name "bengal_defconfig" 2>/dev/null
+            exit 1
+          fi
+          if [ ! -f "$FRAGMENT_CONFIG" ]; then
+            echo "ERROR: Fragment config not found at $FRAGMENT_CONFIG"
+            echo "Searching for it elsewhere in the tree..."
+            find . -name "chime.config" 2>/dev/null
+            exit 1
+          fi
+
+          echo "Both source files confirmed present. Proceeding with merge."
+          echo "Base defconfig line count: $(wc -l < $BASE_DEFCONFIG)"
+          echo "Fragment config line count: $(wc -l < $FRAGMENT_CONFIG)"
+
+          scripts/kconfig/merge_config.sh -m -O out \
+            "$BASE_DEFCONFIG" \
+            "$FRAGMENT_CONFIG"
 
           echo "--- Searching for the resulting .config file ---"
           find . -maxdepth 3 -name ".config" -exec ls -la {} \;
+          echo "--- .config line count if it exists ---"
+          find . -maxdepth 3 -name ".config" -exec wc -l {} \;
 
       - name: Enable ath9k_htc driver options
         run: |
