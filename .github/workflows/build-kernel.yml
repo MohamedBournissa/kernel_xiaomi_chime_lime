@@ -38,15 +38,17 @@ jobs:
       - name: Set up GCC cross compilers
         run: |
           set -e
-          echo "--- Cloning aarch64 (64-bit) GCC toolchain ---"
-          git clone --depth=1 \
-            https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9 \
-            gcc64
+          echo "--- Cloning aarch64 (64-bit) GCC toolchain (pinned to pre-LLVM-migration commit) ---"
+          git clone https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9 gcc64
+          cd gcc64
+          git checkout 236a853
+          cd ..
 
-          echo "--- Cloning arm (32-bit) GCC toolchain ---"
-          git clone --depth=1 \
-            https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9 \
-            gcc32
+          echo "--- Cloning arm (32-bit) GCC toolchain (pinned to pre-LLVM-migration commit) ---"
+          git clone https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9 gcc32
+          cd gcc32
+          git checkout $(git rev-list -n 1 --before="2020-01-01" HEAD)
+          cd ..
 
           echo "--- Verifying gcc64 compiler binary exists and is executable ---"
           GCC64_BIN="$(pwd)/gcc64/bin/aarch64-linux-android-gcc"
