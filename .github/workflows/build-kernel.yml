@@ -163,6 +163,11 @@ jobs:
           NT_OTHER_DIR="drivers/input/touchscreen/nt36xxx"
           if [ -d "$NT_DIR" ] && [ -d "$NT_OTHER_DIR" ]; then
             NT_SYMS=$(grep -rhoE '\bnvt_[A-Za-z0-9_]+\b' "$NT_DIR" 2>/dev/null | sort -u)
+            NT_SYMS=$(printf '%s\nts\nfw_entry\nBoot_Update_Firmware\nprint_selftest_result\n' "$NT_SYMS" | sort -u)
+
+            echo "--- Also extracting any top-level function definitions regardless of naming prefix ---"
+            EXTRA_SYMS=$(grep -rhoE '^[A-Za-z_][A-Za-z0-9_ *]*\b[A-Za-z_][A-Za-z0-9_]*\s*\([^;]*\)\s*$' "$NT_DIR"/*.c 2>/dev/null | grep -oE '\b[A-Za-z_][A-Za-z0-9_]*\s*\(' | grep -oE '^[A-Za-z_][A-Za-z0-9_]*' | sort -u)
+            NT_SYMS=$(printf '%s\n%s\n' "$NT_SYMS" "$EXTRA_SYMS" | sort -u)
 
             while IFS= read -r -d '' f; do
               while IFS= read -r sym; do
