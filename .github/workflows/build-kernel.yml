@@ -128,7 +128,6 @@ jobs:
           sed -i '/CONFIG_ATH9K_COMMON/d' "$CONFIG_FILE"
           sed -i '/CONFIG_ATH_COMMON/d' "$CONFIG_FILE"
           sed -i '/CONFIG_DM_CRYPT/d' "$CONFIG_FILE"
-          sed -i '/CONFIG_SND_SOC_WCD_MBHC/d' "$CONFIG_FILE"
           cat >> "$CONFIG_FILE" << 'EOF'
           CONFIG_ATH_COMMON=m
           CONFIG_ATH9K_HW=m
@@ -137,8 +136,18 @@ jobs:
           CONFIG_MAC80211=y
           CONFIG_CFG80211=y
           # CONFIG_DM_CRYPT is not set
-          # CONFIG_SND_SOC_WCD_MBHC is not set
           EOF
+
+          echo "--- Patching wcd-mbhc-v2.c to remove the broken switch_dev_unregister call ---"
+          MBHC_FILE="techpack/audio/asoc/codecs/wcd-mbhc-v2.c"
+          if [ -f "$MBHC_FILE" ]; then
+            sed -i '/switch_dev_unregister(&accdet_data);/d' "$MBHC_FILE"
+            echo "Patched: removed broken switch_dev_unregister line from $MBHC_FILE"
+            grep -n "switch_dev_unregister" "$MBHC_FILE" || echo "Confirmed: no remaining references to switch_dev_unregister in this file."
+          else
+            echo "WARNING: $MBHC_FILE not found at expected path. Searching..."
+            find . -name "wcd-mbhc-v2.c" 2>/dev/null
+          fi
 
           # Ensure the file also exists at out/.config for the build step,
           # regardless of where merge_config.sh actually placed it.
