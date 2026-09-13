@@ -149,6 +149,21 @@ jobs:
             find . -name "wcd-mbhc-v2.c" 2>/dev/null
           fi
 
+          echo "--- Resolving FT8719 driver duplicate-symbol conflict (keeping BOTH drivers, since Redmi 9T ships with either nt36672a or ft8719 panels depending on batch) ---"
+          FT8719_DIR="drivers/input/touchscreen/FT8719"
+          if [ -d "$FT8719_DIR" ]; then
+            echo "Found $FT8719_DIR. Renaming conflicting symbols with an ft8719_v2_ prefix instead of deleting the driver."
+            for f in "$FT8719_DIR"/*.c; do
+              [ -f "$f" ] || continue
+              sed -i -E 's/\b(fts_(gesture_exit|upgrade_bin|enter_test_environment|fwupg_init|fwupg_exit|write|write_reg|read|read_reg|bus_init|bus_exit))\b/ft8719v2_\1/g' "$f"
+            done
+            sed -i -E 's/\b(module_list|fw_file|fwupgrade)\b/ft8719v2_\1/g' "$FT8719_DIR"/*.c 2>/dev/null
+            echo "Renamed conflicting symbols in $FT8719_DIR to avoid multiple-definition linker errors."
+          else
+            echo "WARNING: $FT8719_DIR not found. Searching for it..."
+            find . -type d -name "FT8719" 2>/dev/null
+          fi
+
           # Ensure the file also exists at out/.config for the build step,
           # regardless of where merge_config.sh actually placed it.
           mkdir -p out
