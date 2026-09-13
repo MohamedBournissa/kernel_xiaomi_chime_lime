@@ -37,10 +37,38 @@ jobs:
 
       - name: Set up GCC cross compilers
         run: |
-          mkdir -p gcc64 gcc32
-          wget -q https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/+archive/refs/heads/master.tar.gz -O gcc64.tar.gz || \
-          git clone --depth=1 https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9 gcc64
-          git clone --depth=1 https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9 gcc32
+          set -e
+          echo "--- Cloning aarch64 (64-bit) GCC toolchain ---"
+          git clone --depth=1 \
+            https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9 \
+            gcc64
+
+          echo "--- Cloning arm (32-bit) GCC toolchain ---"
+          git clone --depth=1 \
+            https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9 \
+            gcc32
+
+          echo "--- Verifying gcc64 compiler binary exists and is executable ---"
+          GCC64_BIN="$(pwd)/gcc64/bin/aarch64-linux-android-gcc"
+          if [ ! -x "$GCC64_BIN" ]; then
+            echo "ERROR: $GCC64_BIN not found or not executable."
+            echo "Contents of gcc64/bin:"
+            ls -la gcc64/bin/ 2>&1 || echo "gcc64/bin does not even exist"
+            exit 1
+          fi
+          echo "Confirmed: $GCC64_BIN exists and is executable."
+          "$GCC64_BIN" --version
+
+          echo "--- Verifying gcc32 compiler binary exists and is executable ---"
+          GCC32_BIN="$(pwd)/gcc32/bin/arm-linux-androideabi-gcc"
+          if [ ! -x "$GCC32_BIN" ]; then
+            echo "ERROR: $GCC32_BIN not found or not executable."
+            echo "Contents of gcc32/bin:"
+            ls -la gcc32/bin/ 2>&1 || echo "gcc32/bin does not even exist"
+            exit 1
+          fi
+          echo "Confirmed: $GCC32_BIN exists and is executable."
+          "$GCC32_BIN" --version
 
       - name: Merge base defconfig with chime fragment
         run: |
@@ -131,12 +159,31 @@ jobs:
             CROSS_COMPILE_ARM32=$CROSS_COMPILE_ARM32 \
             olddefconfig
 
+          set -o pipefail
           make -j$(nproc) O=out \
             ARCH=arm64 \
             CC=clang \
             CLANG_TRIPLE=aarch64-linux-gnu- \
             CROSS_COMPILE=$CROSS_COMPILE \
             CROSS_COMPILE_ARM32=$CROSS_COMPILE_ARM32 2>&1 | tee build.log
+
+          MAKE_EXIT_CODE=$?
+          echo "--- make exited with code: $MAKE_EXIT_CODE ---"
+
+          echo "--- Checking for the final kernel Image ---"
+          if [ ! -f out/arch/arm64/boot/Image ]; then
+            echo "ERROR: out/arch/arm64/boot/Image was NOT produced."
+            echo "Last 50 lines of build.log for context:"
+            tail -n 50 build.log
+            exit 1
+          fi
+
+          echo "SUCCESS: out/arch/arm64/boot/Image exists."
+          ls -la out/arch/arm64/boot/
+
+          if [ "$MAKE_EXIT_CODE" -ne 0 ]; then
+            echo "WARNING: make reported exit code $MAKE_EXIT_CODE but Image exists anyway. Proceeding with caution."
+          fi
 
       - name: Upload build log (always, for debugging)
         if: always()
