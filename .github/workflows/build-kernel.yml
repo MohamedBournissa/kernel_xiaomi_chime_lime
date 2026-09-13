@@ -157,7 +157,7 @@ jobs:
             # Find every top-level function name defined in the FT8719 copy
             SYMS=$(grep -hoE '^[A-Za-z_][A-Za-z0-9_ *]*\b(fts_[A-Za-z0-9_]+|fw_file|module_list|fwupgrade)\s*\(' "$FT8719_DIR"/*.c 2>/dev/null | grep -oE '(fts_[A-Za-z0-9_]+|fw_file|module_list|fwupgrade)' | sort -u)
             # Always include the known problematic bare variables even if the pattern above misses them
-            SYMS=$(printf '%s\nfw_file\nmodule_list\nfwupgrade\n' "$SYMS" | sort -u)
+            SYMS=$(printf '%s\nfw_file\nmodule_list\nfwupgrade\nfts_data\n' "$SYMS" | sort -u)
 
             echo "Symbols to rename in $FT8719_DIR:"
             echo "$SYMS"
@@ -184,6 +184,36 @@ jobs:
             echo "WARNING: $FT8719_DIR or $TOUCH_DIR not found. Searching for them..."
             find . -type d -name "FT8719" 2>/dev/null
             find . -type d -name "focaltech_touch" 2>/dev/null
+          fi
+
+          echo "--- Resolving NT36672A driver duplicate-symbol conflict (same pattern as FT8719, different touchscreen vendor) ---"
+          NT_DIR="drivers/input/touchscreen/NT36672A"
+          NT_OTHER_DIR="drivers/input/touchscreen/nt36xxx"
+          if [ -d "$NT_DIR" ] && [ -d "$NT_OTHER_DIR" ]; then
+            echo "--- Extracting ALL globally-visible nvt_ function AND variable names defined in the NT36672A copy ---"
+            NT_SYMS=$(grep -hoE '\bnvt_[A-Za-z0-9_]+\b' "$NT_DIR"/*.c "$NT_DIR"/*.h 2>/dev/null | sort -u)
+
+            echo "Symbols to rename in $NT_DIR:"
+            echo "$NT_SYMS"
+
+            for f in "$NT_DIR"/*.c "$NT_DIR"/*.h; do
+              [ -f "$f" ] || continue
+              while IFS= read -r sym; do
+                [ -z "$sym" ] && continue
+                sed -i -E "s/\\b${sym}\\b/nt36672av2_${sym}/g" "$f"
+              done <<< "$NT_SYMS"
+            done
+
+            echo "--- Verifying: searching for any remaining un-prefixed nvt_ symbols in NT36672A dir ---"
+            grep -rnE '\bnvt_[A-Za-z0-9_]+\b' "$NT_DIR" | grep -v 'nt36672av2_' && \
+              echo "WARNING: un-prefixed nvt_ symbols still found above, may still conflict" || \
+              echo "Confirmed: all nvt_ symbols in $NT_DIR are now prefixed."
+
+            echo "Renamed conflicting symbols in $NT_DIR to avoid multiple-definition linker errors."
+          else
+            echo "WARNING: $NT_DIR or $NT_OTHER_DIR not found. Searching for them..."
+            find . -type d -name "NT36672A" 2>/dev/null
+            find . -type d -name "nt36xxx" 2>/dev/null
           fi
 
           # Ensure the file also exists at out/.config for the build step,
