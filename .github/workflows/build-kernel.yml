@@ -167,7 +167,9 @@ jobs:
             CC=clang \
             CLANG_TRIPLE=aarch64-linux-gnu- \
             CROSS_COMPILE=$CROSS_COMPILE \
-            CROSS_COMPILE_ARM32=$CROSS_COMPILE_ARM32 2>&1 | tee build.log
+            CROSS_COMPILE_ARM32=$CROSS_COMPILE_ARM32 \
+            KCFLAGS="-Wno-error=implicit-function-declaration -Wno-error=implicit-int -Wno-error=int-conversion -Wno-error=incompatible-pointer-types" \
+            2>&1 | tee build.log
 
           MAKE_EXIT_CODE=$?
           echo "--- make exited with code: $MAKE_EXIT_CODE ---"
