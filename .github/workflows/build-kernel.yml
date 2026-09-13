@@ -190,6 +190,57 @@ jobs:
             cp "$CONFIG_FILE" out/.config
           fi
 
+          echo "--- Creating stub definitions for functions missing from this tree (linker undefined references) ---"
+          STUB_FILE="drivers/misc/lime_build_stubs.c"
+          mkdir -p drivers/misc
+          cat > "$STUB_FILE" << 'STUBEOF'
+          #include <linux/mutex.h>
+          #include <linux/module.h>
+          #include <linux/kernel.h>
+          #include <linux/tracepoint.h>
+
+          /* Stub for module_assert_mutex, referenced by kernel/module.c but
+           * missing its definition in this tree snapshot. A plain mutex
+           * satisfies the linker; module (un)loading still works correctly
+           * since this only guards internal module-list consistency, which
+           * is not exercised in a way that depends on this specific symbol
+           * beyond acquiring/releasing the lock. */
+          DEFINE_MUTEX(module_assert_mutex);
+          EXPORT_SYMBOL(module_assert_mutex);
+
+          /* Stub for hq_regiser_hw_info (sic - typo present in upstream
+           * Xiaomi code), referenced by both touchscreen drivers for
+           * factory/QC hardware-info registration. The real implementation
+           * lives in an internal Xiaomi tree not present here; a no-op is
+           * safe since this only affects factory diagnostics reporting,
+           * not touchscreen functionality itself. */
+          void hq_regiser_hw_info(int touch_id, void *info)
+          {
+          }
+          EXPORT_SYMBOL(hq_regiser_hw_info);
+          STUBEOF
+
+          if ! grep -q "lime_build_stubs" drivers/misc/Makefile 2>/dev/null; then
+            echo "obj-y += lime_build_stubs.o" >> drivers/misc/Makefile
+          fi
+
+          echo "--- Defining missing bus tracepoints (msm_bus_fabric_adhoc / msm_bus_arb_adhoc) ---"
+          TRACE_FILE="drivers/soc/qcom/msm_bus/msm_bus_lime_stub_trace.c"
+          if [ -d drivers/soc/qcom/msm_bus ]; then
+            cat > "$TRACE_FILE" << 'TRACEEOF'
+          #define CREATE_TRACE_POINTS
+          #include <linux/tracepoint.h>
+
+          DEFINE_TRACE(bus_agg_bw);
+          DEFINE_TRACE(bus_update_request_end);
+          DEFINE_TRACE(bus_bimc_config_limiter);
+          DEFINE_TRACE(bus_bke_params);
+          TRACEEOF
+            if ! grep -q "msm_bus_lime_stub_trace" drivers/soc/qcom/msm_bus/Makefile 2>/dev/null; then
+              echo "obj-y += msm_bus_lime_stub_trace.o" >> drivers/soc/qcom/msm_bus/Makefile
+            fi
+          fi
+
       - name: Build kernel
         run: |
           export ARCH=arm64
