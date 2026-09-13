@@ -151,23 +151,35 @@ jobs:
 
           echo "--- Resolving FT8719 driver duplicate-symbol conflict (keeping BOTH drivers, since Redmi 9T ships with either nt36672a or ft8719 panels depending on batch) ---"
           FT8719_DIR="drivers/input/touchscreen/FT8719"
-          if [ -d "$FT8719_DIR" ]; then
-            echo "Found $FT8719_DIR. Renaming conflicting symbols with an ft8719_v2_ prefix instead of deleting the driver."
+          TOUCH_DIR="drivers/input/touchscreen/focaltech_touch"
+          if [ -d "$FT8719_DIR" ] && [ -d "$TOUCH_DIR" ]; then
+            echo "--- Extracting ALL globally-visible function/variable names defined in both driver copies ---"
+            # Find every top-level function name defined in the FT8719 copy
+            SYMS=$(grep -hoE '^[A-Za-z_][A-Za-z0-9_ *]*\b(fts_[A-Za-z0-9_]+|fw_file|module_list|fwupgrade)\s*\(' "$FT8719_DIR"/*.c 2>/dev/null | grep -oE '(fts_[A-Za-z0-9_]+|fw_file|module_list|fwupgrade)' | sort -u)
+            # Always include the known problematic bare variables even if the pattern above misses them
+            SYMS=$(printf '%s\nfw_file\nmodule_list\nfwupgrade\n' "$SYMS" | sort -u)
+
+            echo "Symbols to rename in $FT8719_DIR:"
+            echo "$SYMS"
+
             for f in "$FT8719_DIR"/*.c "$FT8719_DIR"/*.h; do
               [ -f "$f" ] || continue
-              sed -i -E 's/\b(fts_(gesture_exit|upgrade_bin|enter_test_environment|fwupg_init|fwupg_exit|write|write_reg|read|read_reg|bus_init|bus_exit))\b/ft8719v2_\1/g' "$f"
-              sed -i -E 's/\bdev_attr_fts_upgrade_bin\b/dev_attr_ft8719v2_fts_upgrade_bin/g' "$f"
-              sed -i -E 's/\bDEVICE_ATTR\(fts_upgrade_bin\b/DEVICE_ATTR(ft8719v2_fts_upgrade_bin/g' "$f"
+              while IFS= read -r sym; do
+                [ -z "$sym" ] && continue
+                sed -i -E "s/\\b${sym}\\b/ft8719v2_${sym}/g" "$f"
+              done <<< "$SYMS"
             done
-            sed -i -E 's/\b(module_list|fwupgrade)\b/ft8719v2_\1/g' "$FT8719_DIR"/*.c 2>/dev/null
 
-            echo "--- Verifying no more implicit-declaration warnings remain for renamed FT8719 symbols ---"
-            grep -rn "dev_attr_fts_upgrade_bin\b" "$FT8719_DIR" && echo "WARNING: old symbol name still present above" || echo "Confirmed: no remaining references to the old dev_attr_fts_upgrade_bin symbol."
+            echo "--- Verifying: searching for any remaining un-prefixed fts_/fw_file/module_list/fwupgrade symbols in FT8719 dir ---"
+            grep -rnE '\b(fts_[A-Za-z0-9_]+|fw_file|module_list|fwupgrade)\b' "$FT8719_DIR" | grep -v 'ft8719v2_' && \
+              echo "WARNING: un-prefixed symbols still found above, may still conflict" || \
+              echo "Confirmed: all fts_/fw_file/module_list/fwupgrade symbols in $FT8719_DIR are now prefixed."
 
             echo "Renamed conflicting symbols in $FT8719_DIR to avoid multiple-definition linker errors."
           else
-            echo "WARNING: $FT8719_DIR not found. Searching for it..."
+            echo "WARNING: $FT8719_DIR or $TOUCH_DIR not found. Searching for them..."
             find . -type d -name "FT8719" 2>/dev/null
+            find . -type d -name "focaltech_touch" 2>/dev/null
           fi
 
           # Ensure the file also exists at out/.config for the build step,
