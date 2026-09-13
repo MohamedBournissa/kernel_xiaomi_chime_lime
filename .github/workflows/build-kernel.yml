@@ -159,7 +159,7 @@ jobs:
               sed -i -E 's/\bdev_attr_fts_upgrade_bin\b/dev_attr_ft8719v2_fts_upgrade_bin/g' "$f"
               sed -i -E 's/\bDEVICE_ATTR\(fts_upgrade_bin\b/DEVICE_ATTR(ft8719v2_fts_upgrade_bin/g' "$f"
             done
-            sed -i -E 's/\b(module_list|fw_file|fwupgrade)\b/ft8719v2_\1/g' "$FT8719_DIR"/*.c 2>/dev/null
+            sed -i -E 's/\b(module_list|fwupgrade)\b/ft8719v2_\1/g' "$FT8719_DIR"/*.c 2>/dev/null
 
             echo "--- Verifying no more implicit-declaration warnings remain for renamed FT8719 symbols ---"
             grep -rn "dev_attr_fts_upgrade_bin\b" "$FT8719_DIR" && echo "WARNING: old symbol name still present above" || echo "Confirmed: no remaining references to the old dev_attr_fts_upgrade_bin symbol."
