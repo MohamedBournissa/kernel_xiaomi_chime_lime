@@ -15,19 +15,27 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y bc bison build-essential flex libssl-dev libelf-dev zip gcc-aarch64-linux-gnu
+        sudo apt-get install -y bc bison build-essential flex libssl-dev libelf-dev zip python3
 
-    - name: Clone Toolchain (Proton Clang)
+    - name: Clone Toolchain (Weeb GCC + Clang)
       run: |
-        git clone --depth=1 https://github.com/kdrag0n/proton-clang.git clang
+        # تحميل أداة Weeb Kernel GCC (للتعامل مع مكتبات ARM)
+        git clone --depth=1 https://github.com/WeebKernel/WeebGCC.git -b master gcc
+        # تحميل أداة Clang من Google (أكثر استقراراً)
+        mkdir clang
+        wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r498229.tar.gz -O clang.tar.gz
+        tar -xzf clang.tar.gz -C clang
+        rm clang.tar.gz
 
     - name: Build Kernel
       run: |
         export ARCH=arm64
         export SUBARCH=arm64
-        export PATH=$(pwd)/clang/bin:$PATH
-        export CROSS_COMPILE=aarch64-linux-gnu-
+        # استخدام GCC من WeebKernel و Clang من Google
+        export PATH=$(pwd)/clang/bin:$(pwd)/gcc/bin:$PATH
+        export CROSS_COMPILE=$(pwd)/gcc/bin/aarch64-linux-android-
         export CC=clang
+        export CLANG_TRIPLE=aarch64-linux-gnu-
         make O=out defconfig
         make -j$(nproc) O=out
 
@@ -35,6 +43,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: Kernel-Image
-        # إذا لم يجد البناء الملف Image.gz-dtb، احذف علامة # من السطر التالي وضع # على السطر الذي يليه
         path: out/arch/arm64/boot/Image.gz-dtb
-        # path: out/arch/arm64/boot/Image.gz
