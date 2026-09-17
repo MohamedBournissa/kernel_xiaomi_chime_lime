@@ -15,7 +15,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y bc bison build-essential flex libssl-dev libelf-dev zip
+        sudo apt-get install -y bc bison build-essential flex libssl-dev libelf-dev zip gcc-aarch64-linux-gnu
 
     - name: Clone Toolchain (Proton Clang)
       run: |
@@ -35,4 +35,6 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: Kernel-Image
+        # إذا لم يجد البناء الملف Image.gz-dtb، احذف علامة # من السطر التالي وضع # على السطر الذي يليه
         path: out/arch/arm64/boot/Image.gz-dtb
+        # path: out/arch/arm64/boot/Image.gz
